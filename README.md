@@ -17,7 +17,7 @@
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/<your-username>/CSVParser.git
+   git clone https://github.com/IlyaKarakulin/CSV-parser.git
    ```
 
 2. Include the `CSVParser.h` file in your project:
@@ -52,25 +52,6 @@ int main()
 }
 ```
 
-### Example CSV File `example.csv`
-
-```
-ID,Value,Name
-1,10.5,Item1
-2,20.75,Item2
-3,15.0,Item3
-```
-
-### Program Output
-
-```
-ID: 1, Value: 10.5, Name: Item1
-ID: 2, Value: 20.75, Name: Item2
-ID: 3, Value: 15, Name: Item3
-```
-
-## Interface
-
 ### Constructor
 
 ```cpp
@@ -88,24 +69,4 @@ CSVParser(std::ifstream &file, const std::size_t count_skip_lines = 0, const cha
 
 - `begin()` — returns an iterator to the beginning of the file.
 - `end()` — returns an iterator to the end of the file.
-
-### Exceptions
-
-- Throws `std::runtime_error` on type conversion errors.
-
-## Testing
-
-1. Write tests for various data types and usage scenarios.
-2. Ensure correct handling of:
-   - Invalid data in the file.
-   - Excess columns.
-   - Non-standard delimiters.
-
-## License
-
-This project is distributed under the MIT License. See [LICENSE](./LICENSE) for details.
-
-## Author
-
-Created with ❤️ by [Your Name](https://github.com/<your-username>).
 
