@@ -20,19 +20,20 @@ public:
     {
         if (!input_file_.is_open())
         {
-            throw std::runtime_error("Unable to open file");
+            throw std::runtime_error("Unable to open file"); // Throw an error if the file cannot be opened
         }
-        SkipHeader(skip_lines);
+        SkipHeader(skip_lines); // Skip the specified number of header lines
     }
 
     ~CSVReader()
     {
         if (input_file_.is_open())
         {
-            input_file_.close();
+            input_file_.close(); // Ensure the file is closed when the processor is destroyed
         }
     }
 
+    // Iterator class to traverse the CSV file
     class Iterator
     {
     public:
@@ -46,7 +47,7 @@ public:
         {
             if (!at_end)
             {
-                LoadNextRow();
+                LoadNextRow(); // Load the first row if not at the end
             }
         }
 
@@ -54,24 +55,24 @@ public:
         {
             if (!at_end_)
             {
-                LoadNextRow();
+                LoadNextRow(); // Move to the next row
             }
             return *this;
         }
 
         value_type operator*() const
         {
-            return current_row_;
+            return current_row_; // Return the current parsed row as a tuple
         }
 
         bool operator==(const Iterator &other) const
         {
-            return at_end_ == other.at_end_;
+            return at_end_ == other.at_end_; // Check if iterators are at the same position
         }
 
         bool operator!=(const Iterator &other) const
         {
-            return !(*this == other);
+            return !(*this == other); // Check if iterators are not at the same position
         }
 
     private:
@@ -79,56 +80,62 @@ public:
         value_type current_row_;
         bool at_end_;
 
+        // Load the next row and parse it
         void LoadNextRow()
         {
             if (processor_.ReadLine())
             {
-                current_row_ = processor_.ParseRow();
+                current_row_ = processor_.ParseRow(); // Parse the row into a tuple
             }
             else
             {
-                at_end_ = true;
+                at_end_ = true; // Mark as end if no more rows to read
             }
         }
     };
 
+    // Return an iterator pointing to the beginning of the CSV file
     Iterator begin()
     {
         return Iterator(*this);
     }
 
+    // Return an iterator pointing to the end of the CSV file
     Iterator end()
     {
         return Iterator(*this, true);
     }
 
 private:
-    std::ifstream &input_file_;
-    char line_separator_;
-    char field_separator_;
-    char escape_character_;
-    std::string buffer_;
-    std::vector<std::string> row_fields_;
+    std::ifstream &input_file_;           // Input file stream
+    char line_separator_;                 // Character used to separate lines
+    char field_separator_;                // Character used to separate fields
+    char escape_character_;               // Character used to escape special characters
+    std::string buffer_;                  // Buffer for the current line
+    std::vector<std::string> row_fields_; // Vector of fields for the current row
 
+    // Skip a specified number of lines at the beginning of the file
     void SkipHeader(size_t lines_to_skip)
     {
         size_t lines_skipped = 0;
         while (lines_skipped < lines_to_skip && std::getline(input_file_, buffer_, line_separator_))
         {
-            ++lines_skipped;
+            ++lines_skipped; // Increment skipped lines
         }
     }
 
+    // Read the next line from the file
     bool ReadLine()
     {
         if (!std::getline(input_file_, buffer_))
         {
-            return false;
+            return false; // Return false if no line to read
         }
-        row_fields_ = SplitRow(buffer_);
+        row_fields_ = SplitRow(buffer_); // Split the line into fields
         return true;
     }
 
+    // Split a row into fields, considering escape characters
     std::vector<std::string> SplitRow(const std::string &row)
     {
         std::vector<std::string> fields;
@@ -139,40 +146,42 @@ private:
         {
             if (ch == escape_character_)
             {
-                in_escape = !in_escape;
+                in_escape = !in_escape; // Toggle escape mode
             }
             else if (ch == field_separator_ && !in_escape)
             {
-                fields.push_back(field);
-                field.clear();
+                fields.push_back(field); // Add field to vector
+                field.clear();           // Clear the current field
             }
             else
             {
-                field.push_back(ch);
+                field.push_back(ch); // Add character to the current field
             }
         }
-        fields.push_back(field);
+        fields.push_back(field); // Add the last field
         return fields;
     }
 
+    // Convert a string field to the specified type
     template <typename T>
     T Convert(const std::string &field)
     {
         if constexpr (std::is_same_v<T, std::string>)
         {
-            return field;
+            return field; // Directly return if the type is string
         }
         else
         {
             T value;
             if (!AlternativeStringToValue(field, value))
             {
-                throw std::runtime_error("Field conversion failed");
+                throw std::runtime_error("Field conversion failed"); // Throw an error if conversion fails
             }
             return value;
         }
     }
 
+    // Alternative method to parse string to value using type traits
     template <typename T>
     bool AlternativeStringToValue(const std::string &str, T &out_value)
     {
@@ -183,40 +192,42 @@ private:
                 size_t pos;
                 if constexpr (std::is_signed_v<T>)
                 {
-                    out_value = static_cast<T>(std::stoll(str, &pos));
+                    out_value = static_cast<T>(std::stoll(str, &pos)); // Convert to signed integral
                 }
                 else
                 {
-                    out_value = static_cast<T>(std::stoull(str, &pos));
+                    out_value = static_cast<T>(std::stoull(str, &pos)); // Convert to unsigned integral
                 }
-                return pos == str.size();
+                return pos == str.size(); // Ensure full conversion
             }
             else if constexpr (std::is_floating_point_v<T>)
             {
                 size_t pos;
-                out_value = static_cast<T>(std::stold(str, &pos));
-                return pos == str.size();
+                out_value = static_cast<T>(std::stold(str, &pos)); // Convert to floating point
+                return pos == str.size();                          // Ensure full conversion
             }
             return false;
         }
         catch (...)
         {
-            return false;
+            return false; // Return false on any conversion error
         }
     }
 
+    // Parse the current row into a tuple of the specified types
     std::tuple<ColumnTypes...> ParseRow()
     {
         if (row_fields_.size() != sizeof...(ColumnTypes))
         {
-            throw std::runtime_error("Row size mismatch");
+            throw std::runtime_error("Row size mismatch"); // Throw an error if row size doesn't match
         }
 
         std::tuple<ColumnTypes...> result;
-        PopulateTuple(result, std::make_index_sequence<sizeof...(ColumnTypes)>{});
+        PopulateTuple(result, std::make_index_sequence<sizeof...(ColumnTypes)>{}); // Populate the tuple with fields
         return result;
     }
 
+    // Populate a tuple with values from the current row
     template <std::size_t... Indices>
     void PopulateTuple(std::tuple<ColumnTypes...> &tuple, std::index_sequence<Indices...>)
     {
