@@ -7,211 +7,187 @@
 #include <limits>
 #include <utility>
 
-#ifndef CSVPARSER_H
-#define CSVPARSER_H
-
-const std::string kRED = "\033[1;31m";
-const std::string kRESET = "\033[0m";
-const std::string kYELLOW = "\033[1;33m";
-
-template <typename... Types>
-class CSVParser
+template <typename... DataTypes>
+class CSVReader
 {
 public:
-    CSVParser(std::ifstream &file, const std::size_t count_skip_lines = 0, const char row_separator = '\n',
-              const char column_separator = ',', const char escape_character = '\\') : file_(file),
-                                                                                       row_separator_(row_separator),
-                                                                                       column_separator_(column_separator),
-                                                                                       escape_character_(escape_character)
+    CSVReader(std::ifstream &input_file, const std::size_t skip_lines = 0, const char line_delimiter = '\n',
+              const char value_delimiter = ',', const char escape_char = '\\') : file_stream_(input_file),
+                                                                                 line_delimiter_(line_delimiter),
+                                                                                 value_delimiter_(value_delimiter),
+                                                                                 escape_char_(escape_char)
     {
-        if (!file_.is_open())
+        if (!file_stream_.is_open())
         {
-            std::cerr << kRED << "Could not open file!" << kRESET << std::endl;
+            std::cerr << "Error: Unable to open file!" << std::endl;
             exit(1);
         }
 
-        numb_column_ = 0;
-        numb_row_ = count_skip_lines;
-        SkipLinesFile(count_skip_lines);
+        current_column_ = 0;
+        current_row_ = skip_lines;
+        SkipInitialLines(skip_lines);
     }
 
-    ~CSVParser()
+    ~CSVReader()
     {
-        if (file_.is_open())
+        if (file_stream_.is_open())
         {
-            file_.close();
+            file_stream_.close();
         }
     }
 
-    class CSVParserIter
+    class CSVIterator
     {
     public:
         typedef std::input_iterator_tag iterator_category;
-        typedef std::tuple<Types...> value_type;
+        typedef std::tuple<DataTypes...> value_type;
         typedef ptrdiff_t difference_type;
         typedef value_type &reference;
         typedef value_type *pointer;
 
-        CSVParserIter(CSVParser &parser, bool is_end = false) : parser_(parser), is_end_(is_end)
+        CSVIterator(CSVReader &reader, bool end_flag = false) : reader_(reader), end_flag_(end_flag)
         {
-            if (!is_end_)
+            if (!end_flag_)
             {
-                ReadNextRow();
+                FetchNextLine();
             }
         }
 
-        CSVParserIter &operator++()
+        CSVIterator &operator++()
         {
-            if (!is_end_)
+            if (!end_flag_)
             {
-                ReadNextRow();
+                FetchNextLine();
             }
             return *this;
         }
 
         value_type operator*() const
         {
-            return current_values_;
+            return parsed_values_;
         }
 
-        bool operator==(const CSVParserIter &other) const
+        bool operator==(const CSVIterator &other) const
         {
-            return is_end_ == other.is_end_;
+            return end_flag_ == other.end_flag_;
         }
 
-        bool operator!=(const CSVParserIter &other) const
+        bool operator!=(const CSVIterator &other) const
         {
             return !(*this == other);
         }
 
     private:
-        CSVParser &parser_;
-        value_type current_values_;
-        bool is_end_;
+        CSVReader &reader_;
+        value_type parsed_values_;
+        bool end_flag_;
 
-        void ReadNextRow()
+        void FetchNextLine()
         {
-            if (parser_.ReadNextRow())
+            if (reader_.ParseNextLine())
             {
-                current_values_ = parser_.GetCurrentValues();
+                parsed_values_ = reader_.RetrieveCurrentValues();
             }
             else
             {
-                current_values_ = value_type();
-                is_end_ = true;
+                parsed_values_ = value_type();
+                end_flag_ = true;
             }
         }
     };
 
-    CSVParserIter begin()
+    CSVIterator begin()
     {
-        return CSVParserIter(*this);
+        return CSVIterator(*this);
     }
 
-    CSVParserIter end()
+    CSVIterator end()
     {
-        return CSVParserIter(*this, true);
+        return CSVIterator(*this, true);
     }
 
 private:
-    std::ifstream &file_;
-    char row_separator_;
-    char column_separator_;
-    char escape_character_;
+    std::ifstream &file_stream_;
+    char line_delimiter_;
+    char value_delimiter_;
+    char escape_char_;
     std::string current_line_;
-    std::vector<std::string> current_values_;
-    bool inside_escape_character_ = false;
-    int numb_column_;
-    int numb_row_;
+    std::vector<std::string> parsed_line_values_;
+    bool within_escape_sequence_ = false;
+    int current_column_;
+    int current_row_;
 
-    void IncColumn()
+    void SkipInitialLines(const std::size_t lines_to_skip)
     {
-        numb_column_++;
-    }
-
-    void IncRow()
-    {
-        numb_row_++;
-    }
-
-    void ToZeroColumn()
-    {
-        numb_column_ = 0;
-    }
-
-    void SkipLinesFile(const std::size_t count_skip_lines)
-    {
-        for (size_t i = 0; i < count_skip_lines; i++)
+        for (size_t i = 0; i < lines_to_skip; i++)
         {
-            file_.ignore(std::numeric_limits<std::streamsize>::max(), row_separator_);
+            file_stream_.ignore(std::numeric_limits<std::streamsize>::max(), line_delimiter_);
         }
     }
 
-    bool ReadNextRow()
+    bool ParseNextLine()
     {
-        if (!std::getline(file_, current_line_))
+        if (!std::getline(file_stream_, current_line_))
         {
             return false;
         }
 
-        std::stringstream ss(current_line_);
-        std::string temp_value;
-        current_values_.clear();
+        std::stringstream line_stream(current_line_);
+        std::string value;
+        parsed_line_values_.clear();
 
-        while (std::getline(ss, temp_value, column_separator_))
+        while (std::getline(line_stream, value, value_delimiter_))
         {
-            for (size_t i = 0; i < temp_value.size(); ++i)
+            for (size_t i = 0; i < value.size(); ++i)
             {
-                if (temp_value[i] == escape_character_)
+                if (value[i] == escape_char_)
                 {
-                    inside_escape_character_ = !inside_escape_character_;
-                    temp_value.erase(i, 1);
+                    within_escape_sequence_ = !within_escape_sequence_;
+                    value.erase(i, 1);
                     --i;
                 }
             }
 
-            current_values_.push_back(temp_value);
+            parsed_line_values_.push_back(value);
         }
 
-        ToZeroColumn();
-        IncRow();
+        current_column_ = 0;
+        current_row_++;
         return true;
     }
 
-    std::tuple<Types...> GetCurrentValues()
+    std::tuple<DataTypes...> RetrieveCurrentValues()
     {
-        std::tuple<Types...> result;
-        convertValues(result, std::make_index_sequence<sizeof...(Types)>());
+        std::tuple<DataTypes...> result;
+        ConvertLineValues(result, std::make_index_sequence<sizeof...(DataTypes)>());
         return result;
     }
 
-    template <std::size_t... Is>
-    void convertValues(std::tuple<Types...> &result, std::index_sequence<Is...>)
+    template <std::size_t... Indices>
+    void ConvertLineValues(std::tuple<DataTypes...> &result, std::index_sequence<Indices...>)
     {
-        ((std::get<Is>(result) = convert<std::decay_t<Types>>(current_values_[Is])), ...);
+        ((std::get<Indices>(result) = ConvertValue<std::decay_t<DataTypes>>(parsed_line_values_[Indices])), ...);
     }
 
     template <typename T>
-    T convert(const std::string &value)
+    T ConvertValue(const std::string &input)
     {
-        IncColumn();
+        current_column_++;
 
         if constexpr (std::is_same_v<T, std::string>)
         {
-            return value;
+            return input;
         }
         else
         {
-            std::stringstream ss(value);
-            T result;
-            ss >> result;
+            std::stringstream ss(input);
+            T converted_value;
+            ss >> converted_value;
             if (ss.fail() || !ss.eof())
             {
-                throw std::runtime_error("Conversion failed");
+                throw std::runtime_error("Value conversion failed");
             }
-            return result;
+            return converted_value;
         }
     }
 };
-
-#endif
